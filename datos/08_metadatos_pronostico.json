@@ -1,0 +1,9 @@
+{
+  "fuente": "/mnt/data/ML3_Pronostico_El_Nino/enso_dataset_maestro.csv",
+  "fecha_ultimo_dato": "2026-09",
+  "fecha_ejecucion_utc": "2026-10-24T04:24:36.066641+00:00",
+  "metodo": "Ridge regularizado, pronósticos directos 1-6 meses",
+  "validacion": "orígenes septiembre 2005-2025, reentrenamiento por origen y horizonte",
+  "incertidumbre": "cuantil 90% del error absoluto histórico por horizonte; banda heurística no calibrada",
+  "advertencia": "Pronóstico experimental Niño 3.4 mensual. No es ONI oficial, ni pronóstico oficial NOAA, ni predicción de lluvias en Perú."
+}
