@@ -85,11 +85,35 @@ with t1:
         lower=[float(h.anom_nino34.iloc[-1])]+sel.limite_inferior_c.tolist()
         upper=[float(h.anom_nino34.iloc[-1])]+sel.limite_superior_c.tolist()
         f.add_trace(go.Scatter(x=xx,y=upper,mode="lines",line=dict(width=0),showlegend=False,hoverinfo="skip"))
-        f.add_trace(go.Scatter(x=xx,y=lower,mode="lines",line=dict(width=0),fill="tonexty",fillcolor="rgba(189,113,65,.12)",name="Error histórico · referencia",hoverinfo="skip"))
+        f.add_trace(go.Scatter(x=xx,y=lower,mode="lines",line=dict(width=0),fill="tonexty",fillcolor="rgba(189,113,65,.12)",name="Error histórico · referencia",showlegend=False,hoverinfo="skip"))
     f.add_trace(go.Scatter(x=h.fecha,y=h.anom_nino34,mode="lines+markers",name="Observado · NOAA",line=dict(color=TEAL,width=3),marker=dict(size=5),hovertemplate="%{x|%b %Y}<br>%{y:+.2f} °C<extra>Observado</extra>"))
     f.add_trace(go.Scatter(x=[h.fecha.iloc[-1]]+sel.fecha.tolist(),y=[float(h.anom_nino34.iloc[-1])]+sel.pronostico_nino34_c.tolist(),mode="lines+markers",name="Proyección · Ridge",line=dict(color=COPPER,width=3,dash="dash"),marker=dict(size=7),hovertemplate="%{x|%b %Y}<br>%{y:+.2f} °C<extra>Estimación</extra>"))
     f.add_vline(x=h.fecha.iloc[-1].timestamp()*1000,line=dict(color="#99A9B0",width=1,dash="dot"))
-    f.add_annotation(x=sel.fecha.iloc[-1],y=float(sel.pronostico_nino34_c.iloc[-1]),text=f"{end.pronostico_nino34_c:+.2f} °C",showarrow=False,xanchor="left",xshift=12,font=dict(size=14,color=COPPER))
+    # Etiquetas directas fuera del trazado, igual que en la Figura 02.
+    # La observación termina en septiembre; la proyección termina en el mes seleccionado.
+    from datetime import timedelta
+    obs_date=pd.Timestamp(h.fecha.iloc[-1])
+    pred_date=pd.Timestamp(sel.fecha.iloc[-1])
+    obs_value=float(h.anom_nino34.iloc[-1])
+    pred_value=float(sel.pronostico_nino34_c.iloc[-1])
+    label_date=pred_date+timedelta(days=14)
+    right_edge=pred_date+timedelta(days=83)
+    # La etiqueta del tramo observado se ubica junto al corte histórico,
+    # evitando confundirla con la curva de pronóstico.
+    f.add_annotation(x=obs_date,y=obs_value,xref="x",yref="y",
+                     text="<b>Observado · NOAA</b>",showarrow=True,ax=-90,ay=-32,
+                     arrowhead=0,arrowwidth=1,arrowcolor=TEAL,
+                     font=dict(family="Arial",size=11,color=TEAL),
+                     bgcolor="rgba(255,255,255,0.96)")
+    f.add_shape(type="line",xref="x",yref="y",x0=pred_date,x1=label_date,
+                y0=pred_value,y1=pred_value,line=dict(color=COPPER,width=1))
+    f.add_annotation(x=label_date,y=pred_value,xref="x",yref="y",
+                     text=f"<b>Pronóstico · {pred_value:+.2f} °C</b>",
+                     showarrow=False,xanchor="left",yanchor="middle",xshift=5,
+                     font=dict(family="Arial",size=11,color=COPPER),
+                     bgcolor="rgba(255,255,255,0.96)")
+    f.update_layout(showlegend=False,margin=dict(l=10,r=18,t=32,b=15))
+    f.update_xaxes(range=[pd.Timestamp(h.fecha.iloc[0])-timedelta(days=12),right_edge])
     f.update_yaxes(title="Anomalía (°C)")
     st.plotly_chart(f,use_container_width=True,config={"displaylogo":False})
     st.markdown(f'<div class="note"><strong>Hallazgo principal.</strong> Desde {last.anom_nino34:+.2f} °C en septiembre de 2026, el modelo estima {end.pronostico_nino34_c:+.2f} °C en {month(end.fecha)}. La trayectoria proyectada no constituye una observación ni una previsión oficial.</div>',unsafe_allow_html=True)
