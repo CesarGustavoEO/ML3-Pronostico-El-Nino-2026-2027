@@ -1,130 +1,158 @@
-"""ML3 · Explorador de pronóstico experimental Niño 3.4, datos NOAA hasta 2026-09."""
+"""ML3 — Informe interactivo de anomalías Niño 3.4, datos NOAA a septiembre 2026."""
 from pathlib import Path
 import json
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-st.set_page_config(page_title='ML 3 | El Niño 2026–2027', page_icon='🌊', layout='wide', initial_sidebar_state='expanded')
-ROOT=Path(__file__).resolve().parent/'datos'
+st.set_page_config(page_title="ML 03 | Perspectiva del Pacífico", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
+DATA = Path(__file__).resolve().parent / "datos"
+INK="#172C39"; MUTED="#60717B"; TEAL="#087B83"; COPPER="#BD7141"; GRID="#E7ECEE"; PALE="#F5F7F7"
+
 @st.cache_data
-def cargar():
-    hist=pd.read_csv(ROOT/'enso_dataset_maestro.csv',parse_dates=['fecha'])
-    pron=pd.read_csv(ROOT/'03_PRONOSTICO_CONGELADO.csv')
-    val=pd.read_csv(ROOT/'01_validacion_retroactiva.csv')
-    met=pd.read_csv(ROOT/'02_metricas_por_horizonte.csv')
-    ana=pd.read_csv(ROOT/'04_analogos_historicos.csv')
-    info=json.loads((ROOT/'08_metadatos_pronostico.json').read_text(encoding='utf-8'))
+def load():
+    hist=pd.read_csv(DATA/"enso_dataset_maestro.csv",parse_dates=["fecha"]).sort_values("fecha")
+    pron=pd.read_csv(DATA/"03_PRONOSTICO_CONGELADO.csv");pron["fecha"]=pd.to_datetime(pron["fecha"])
+    val=pd.read_csv(DATA/"01_validacion_retroactiva.csv")
+    met=pd.read_csv(DATA/"02_metricas_por_horizonte.csv")
+    ana=pd.read_csv(DATA/"04_analogos_historicos.csv").sort_values("distancia_estandarizada")
+    info=json.loads((DATA/"08_metadatos_pronostico.json").read_text(encoding="utf-8"))
     return hist,pron,val,met,ana,info
-hist,pron,val,met,ana,info=cargar()
-last=hist.sort_values('fecha').iloc[-1]
-months={1:'ene',2:'feb',3:'mar',4:'abr',5:'may',6:'jun',7:'jul',8:'ago',9:'sep',10:'oct',11:'nov',12:'dic'}
-def meslabel(s):
-    t=pd.to_datetime(s)
-    return f'{months[t.month].capitalize()} {t.year}'
-def basefig(height=440):
+hist,pron,val,met,ana,info=load()
+last=hist.iloc[-1]
+
+st.markdown("""<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
+html,body,[class*="css"],.stApp {font-family:'DM Sans',sans-serif;color:#172C39}
+.stApp{background:#FFFFFF}
+.block-container{max-width:1180px;padding-top:2.4rem;padding-bottom:3rem}
+h1,h2,h3{font-family:'DM Sans',sans-serif!important;letter-spacing:-.035em!important;color:#172C39!important}
+h1{font-size:2.6rem!important;font-weight:700!important}
+h2{font-size:1.55rem!important;font-weight:650!important}
+h3{font-size:1.12rem!important}
+[data-testid="stMetric"]{background:#F5F7F7;padding:18px 20px;border-top:2px solid #DCE4E5;border-radius:2px}
+[data-testid="stMetricLabel"]{font-size:.84rem!important;color:#60717B!important}
+[data-testid="stMetricValue"]{font-size:1.85rem!important;color:#172C39!important}
+[data-testid="stTabs"] button{font-weight:600}
+[data-testid="stTabs"] button[aria-selected="true"]{color:#087B83!important}
+.stMarkdown p{line-height:1.6}
+.eyebrow{font-size:.73rem;letter-spacing:.17em;text-transform:uppercase;color:#60717B;font-weight:700;margin-bottom:12px}
+.deck{font-size:1.07rem;color:#536774;max-width:800px;line-height:1.7;margin:0 0 20px}
+.rule{border-top:1px solid #DCE4E5;margin:24px 0}
+.note{border-left:3px solid #BD7141;background:#F8F6F2;padding:14px 18px;font-size:.92rem;line-height:1.65}
+.section-number{color:#BD7141;font-size:.78rem;font-weight:700;letter-spacing:.12em}
+.small-note{color:#60717B;font-size:.83rem;line-height:1.6}
+</style>""",unsafe_allow_html=True)
+
+def fig(height=420):
     f=go.Figure()
-    f.update_layout(height=height,template='plotly_white',margin=dict(l=12,r=12,t=35,b=12),font=dict(family='Arial',size=13,color='#172B45'),hovermode='x unified',legend=dict(orientation='h',y=1.12,x=0),paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)')
-    f.update_xaxes(showgrid=False)
-    f.update_yaxes(gridcolor='#E8EEF3',zeroline=True,zerolinecolor='#A3B0BD')
+    f.update_layout(height=height,template="plotly_white",font=dict(family="Arial",color=INK,size=12),margin=dict(l=10,r=22,t=35,b=15),paper_bgcolor="white",plot_bgcolor="white",hovermode="x unified",legend=dict(orientation="h",x=0,y=1.15,font=dict(size=12)),hoverlabel=dict(bgcolor="white",font_color=INK),showlegend=True)
+    f.update_xaxes(showgrid=False,showline=True,linecolor="#B6C2C6",tickfont=dict(color=MUTED))
+    f.update_yaxes(gridcolor=GRID,zeroline=True,zerolinecolor="#B9C5C9",tickfont=dict(color=MUTED))
     return f
-st.markdown('''<style>
-.block-container{padding-top:1.5rem;max-width:1450px}
-h1,h2,h3{color:#183047!important}
-[data-testid="stMetric"]{background:#F4F8FA;border:1px solid #DEE7ED;padding:13px 17px;border-radius:12px}
-</style>''',unsafe_allow_html=True)
-with st.sidebar:
-    st.header('🌊 Explorar ML 3')
-    horizon=st.slider('¿Cuántos meses deseas ver?',1,6,6)
-    histmonths=st.slider('Meses de historia visible',6,48,18,6)
-    show_band=st.toggle('Mostrar margen de error histórico',True)
-    st.divider()
-    st.caption('**Último dato observado:** septiembre de 2026. Los meses siguientes son estimaciones experimentales.')
-    st.caption('Fuente: NOAA CPC (archivo procesado); resultados generados con Ridge directo.')
-    st.warning('No es un pronóstico oficial ni una alerta de lluvias para el Perú.',icon='⚠️')
-st.title('🌊 ¿Cómo podría evolucionar El Niño?')
-st.caption('ML 3 · Pronóstico experimental del índice mensual Niño 3.4 · Observaciones hasta septiembre de 2026')
-sel=pron[pron.horizonte_meses<=horizon].copy()
-end=sel.iloc[-1]
-a,b,c,d=st.columns(4)
-a.metric('Último dato observado',f'{last.anom_nino34:+.2f} °C',meslabel(last.fecha))
-b.metric('Estimación al final del horizonte',f'{end.pronostico_nino34_c:+.2f} °C',meslabel(end.fecha))
-c.metric('Cambio estimado',f'{end.pronostico_nino34_c-last.anom_nino34:+.2f} °C','Frente a sep. 2026',delta_color='off')
-d.metric('Error medio histórico del ML',f'{met.loc[met.horizonte_meses==horizon,"mae_ml_c"].iloc[0]:.2f} °C',f'A {horizon} mes(es)')
-t1,t2,t3,t4=st.tabs(['📈 Pronóstico','🕰️ Comparación histórica','🧪 ¿Acertó el modelo?','📚 Datos y método'])
+
+def month(d):
+    return pd.to_datetime(d).strftime("%m/%Y")
+
+st.markdown('<div class="eyebrow">UNIVERSIDAD NACIONAL DEL ALTIPLANO  /  VISUALIZACIÓN DE DATOS  /  MÓDULO 03</div>',unsafe_allow_html=True)
+st.title("Perspectiva del Pacífico 2026–2027")
+st.markdown('<div class="deck">Evolución observada de la anomalía Niño 3.4 y proyección experimental a seis meses. Una lectura visual que distingue evidencia histórica, estimación e incertidumbre.</div>',unsafe_allow_html=True)
+st.markdown('<div class="rule"></div>',unsafe_allow_html=True)
+
+with st.container():
+    c1,c2,c3=st.columns([1,1,2],gap="large")
+    with c1: horizon=st.selectbox("Horizonte de análisis",options=[1,2,3,4,5,6],index=5,format_func=lambda x:f"{x} {'mes' if x==1 else 'meses'}")
+    with c2: history=st.selectbox("Historia visible",options=[12,18,24,36],index=1,format_func=lambda x:f"{x} meses")
+    with c3: show_band=st.toggle("Mostrar amplitud del error histórico",value=True,help="La banda usa el percentil 90 del error absoluto histórico por horizonte. No es un intervalo probabilístico calibrado.")
+sel=pron[pron.horizonte_meses<=horizon].copy(); end=sel.iloc[-1]
+metrics=met.loc[met.horizonte_meses==horizon].iloc[0]
+a,b,c,d=st.columns(4,gap="medium")
+a.metric("Último registro · sep. 2026",f"{last.anom_nino34:+.2f} °C")
+b.metric(f"Estimación · {month(end.fecha)}",f"{end.pronostico_nino34_c:+.2f} °C")
+c.metric("Variación proyectada",f"{end.pronostico_nino34_c-last.anom_nino34:+.2f} °C")
+d.metric(f"MAE retrospectivo · {horizon} m",f"{metrics.mae_ml_c:.2f} °C")
+st.markdown('<div class="rule"></div>',unsafe_allow_html=True)
+
+t1,t2,t3,t4=st.tabs(["01  Evolución y pronóstico","02  Episodios comparables","03  Validación","04  Datos y método"])
 with t1:
-    st.subheader('Lo observado y lo estimado, sin confundirlos')
-    h=hist.sort_values('fecha').tail(histmonths)
-    f=basefig(510)
+    st.markdown('<div class="section-number">FIGURA 01 / SERIE TEMPORAL</div>',unsafe_allow_html=True)
+    st.subheader("De la observación a la estimación")
+    st.caption("Anomalía de temperatura superficial del mar en Niño 3.4 (°C respecto a la referencia climatológica NOAA).")
+    h=hist.tail(history)
+    f=fig(475)
     if show_band:
-        f.add_trace(go.Scatter(x=sel.fecha,y=sel.limite_superior_c,mode='lines',line=dict(width=0),hoverinfo='skip',showlegend=False))
-        f.add_trace(go.Scatter(x=sel.fecha,y=sel.limite_inferior_c,mode='lines',line=dict(width=0),fill='tonexty',fillcolor='rgba(231,147,60,.20)',name='Margen de error histórico (orientativo)',hovertemplate='%{y:.2f} °C<extra></extra>'))
-    f.add_trace(go.Scatter(x=h.fecha,y=h.anom_nino34,mode='lines+markers',line=dict(color='#087E8B',width=4),marker=dict(size=6),name='Observado · NOAA',hovertemplate='%{y:+.2f} °C<extra></extra>'))
-    f.add_trace(go.Scatter(x=[h.fecha.iloc[-1]]+sel.fecha.tolist(),y=[float(h.anom_nino34.iloc[-1])]+sel.pronostico_nino34_c.tolist(),mode='lines+markers',line=dict(color='#E58C36',width=4,dash='dash'),marker=dict(size=8),name='Pronóstico · ML',hovertemplate='%{y:+.2f} °C<extra></extra>'))
-    f.add_vline(x=h.fecha.iloc[-1].timestamp()*1000,line_color='#63788D',line_dash='dot')
-    f.update_yaxes(title='Anomalía Niño 3.4 (°C)')
-    st.plotly_chart(f,use_container_width=True)
-    st.info(f'**Lectura sencilla:** el modelo estima que la anomalía pase de {last.anom_nino34:+.2f} °C a {end.pronostico_nino34_c:+.2f} °C hacia {meslabel(end.fecha)}. Es una estimación, no una certeza.')
-    st.caption('La franja sombreada se calcula con el percentil 90 de errores absolutos históricos por horizonte. No es un intervalo de confianza ni una probabilidad calibrada del 90 %.')
-    with st.expander('Ver los valores mensuales y descargarlos'):
-        view=sel[['fecha','pronostico_nino34_c','limite_inferior_c','limite_superior_c']].rename(columns={'fecha':'Mes','pronostico_nino34_c':'Estimación °C','limite_inferior_c':'Límite orientativo inferior °C','limite_superior_c':'Límite orientativo superior °C'})
-        st.dataframe(view,use_container_width=True,hide_index=True)
-        st.download_button('Descargar pronóstico congelado',pron.to_csv(index=False).encode('utf-8-sig'),'ML3_pronostico_congelado.csv','text/csv')
+        xx=[h.fecha.iloc[-1]]+sel.fecha.tolist()
+        lower=[float(h.anom_nino34.iloc[-1])]+sel.limite_inferior_c.tolist()
+        upper=[float(h.anom_nino34.iloc[-1])]+sel.limite_superior_c.tolist()
+        f.add_trace(go.Scatter(x=xx,y=upper,mode="lines",line=dict(width=0),showlegend=False,hoverinfo="skip"))
+        f.add_trace(go.Scatter(x=xx,y=lower,mode="lines",line=dict(width=0),fill="tonexty",fillcolor="rgba(189,113,65,.12)",name="Error histórico · referencia",hoverinfo="skip"))
+    f.add_trace(go.Scatter(x=h.fecha,y=h.anom_nino34,mode="lines+markers",name="Observado · NOAA",line=dict(color=TEAL,width=3),marker=dict(size=5),hovertemplate="%{x|%b %Y}<br>%{y:+.2f} °C<extra>Observado</extra>"))
+    f.add_trace(go.Scatter(x=[h.fecha.iloc[-1]]+sel.fecha.tolist(),y=[float(h.anom_nino34.iloc[-1])]+sel.pronostico_nino34_c.tolist(),mode="lines+markers",name="Proyección · Ridge",line=dict(color=COPPER,width=3,dash="dash"),marker=dict(size=7),hovertemplate="%{x|%b %Y}<br>%{y:+.2f} °C<extra>Estimación</extra>"))
+    f.add_vline(x=h.fecha.iloc[-1].timestamp()*1000,line=dict(color="#99A9B0",width=1,dash="dot"))
+    f.add_annotation(x=sel.fecha.iloc[-1],y=float(sel.pronostico_nino34_c.iloc[-1]),text=f"{end.pronostico_nino34_c:+.2f} °C",showarrow=False,xanchor="left",xshift=12,font=dict(size=14,color=COPPER))
+    f.update_yaxes(title="Anomalía (°C)")
+    st.plotly_chart(f,use_container_width=True,config={"displaylogo":False})
+    st.markdown(f'<div class="note"><strong>Hallazgo principal.</strong> Desde {last.anom_nino34:+.2f} °C en septiembre de 2026, el modelo estima {end.pronostico_nino34_c:+.2f} °C en {month(end.fecha)}. La trayectoria proyectada no constituye una observación ni una previsión oficial.</div>',unsafe_allow_html=True)
+    st.markdown('<p class="small-note">La banda representa el percentil 90 de errores absolutos retrospectivos por horizonte; no equivale a un intervalo de confianza del 90 %.</p>',unsafe_allow_html=True)
+    with st.expander("Tabla de resultados y descarga"):
+        st.dataframe(sel[["fecha","pronostico_nino34_c","limite_inferior_c","limite_superior_c"]],hide_index=True,use_container_width=True)
+        st.download_button("Descargar proyecciones (CSV)",pron.to_csv(index=False).encode("utf-8-sig"),"ML3_pronostico.csv","text/csv")
 with t2:
-    st.subheader('¿Qué ocurrió después en años parecidos?')
-    st.caption('La semejanza se calculó con datos históricos previos a octubre; las trayectorias siguientes son observaciones de aquellos años, no pronósticos actuales.')
-    top=ana.sort_values('distancia_estandarizada').head(10)
-    years=st.multiselect('Años para comparar',top.anio_analogo.astype(int).tolist(),default=top.anio_analogo.astype(int).head(3).tolist(),max_selections=5)
-    f=basefig(470)
-    f.add_trace(go.Scatter(x=list(range(1,horizon+1)),y=sel.pronostico_nino34_c,mode='lines+markers',name='Pronóstico 2026–27',line=dict(color='#E58C36',width=5),marker=dict(size=9)))
-    palette=['#2463A5','#13856C','#9A4C86','#687E35','#98643B']
-    for i,yr in enumerate(years):
-        row=ana[ana.anio_analogo==yr].iloc[0]
-        f.add_trace(go.Scatter(x=list(range(1,horizon+1)),y=[row[f'mes_futuro_{j}_c'] for j in range(1,horizon+1)],mode='lines+markers',name=str(yr),line=dict(color=palette[i],width=2.5)))
-    f.update_xaxes(title='Meses posteriores a septiembre',tickmode='array',tickvals=list(range(1,horizon+1)),ticktext=[meslabel(x) for x in sel.fecha])
-    f.update_yaxes(title='Anomalía Niño 3.4 (°C)')
-    st.plotly_chart(f,use_container_width=True)
-    st.caption('Distancia menor = mayor similitud bajo el método utilizado; no significa que el futuro de 2026 tenga que repetirse.')
-    st.dataframe(top[['anio_analogo','distancia_estandarizada']].rename(columns={'anio_analogo':'Año histórico','distancia_estandarizada':'Distancia de similitud'}),hide_index=True,use_container_width=True)
+    st.markdown('<div class="section-number">FIGURA 02 / CONTEXTO HISTÓRICO</div>',unsafe_allow_html=True)
+    st.subheader("Qué ocurrió después en episodios comparables")
+    st.caption("Las curvas históricas muestran hechos observados en otros años; no representan escenarios probabilísticos para 2026.")
+    years=st.multiselect("Seleccionar episodios",ana.anio_analogo.astype(int).head(10).tolist(),default=ana.anio_analogo.astype(int).head(3).tolist(),max_selections=4)
+    f=fig(450)
+    colors=["#536C83","#7C8D83","#9A8E7B","#9B8190"]
+    for i,year in enumerate(years):
+        row=ana[ana.anio_analogo==year].iloc[0]
+        vals=[row[f"mes_futuro_{j}_c"] for j in range(1,horizon+1)]
+        f.add_trace(go.Scatter(x=sel.fecha,y=vals,mode="lines+markers",name=f"Episodio {year}",line=dict(color=colors[i],width=2),marker=dict(size=5)))
+    f.add_trace(go.Scatter(x=sel.fecha,y=sel.pronostico_nino34_c,mode="lines+markers",name="Proyección 2026–27",line=dict(color=COPPER,width=4,dash="dash"),marker=dict(size=7)))
+    f.update_yaxes(title="Anomalía Niño 3.4 (°C)")
+    st.plotly_chart(f,use_container_width=True,config={"displaylogo":False})
+    st.markdown('<p class="small-note">Una distancia estandarizada menor indica mayor parecido bajo el método de búsqueda empleado. No garantiza que las trayectorias futuras se repitan.</p>',unsafe_allow_html=True)
+    with st.expander("Consultar distancias históricas"):
+        st.dataframe(ana[["anio_analogo","distancia_estandarizada"]].rename(columns={"anio_analogo":"Año","distancia_estandarizada":"Distancia estandarizada"}),hide_index=True,use_container_width=True)
 with t3:
-    st.subheader('¿El ML predice mejor que repetir el último valor?')
-    st.caption('Prueba retrospectiva: cada septiembre de 2005 a 2025 se pronosticaron los seis meses siguientes, sin utilizar sus observaciones al entrenar.')
-    f=basefig(430)
-    f.add_trace(go.Bar(x=met.horizonte_meses,y=met.mae_ml_c,name='ML Ridge',marker_color='#E58C36',text=[f'{x:.2f}' for x in met.mae_ml_c],textposition='outside'))
-    f.add_trace(go.Bar(x=met.horizonte_meses,y=met.mae_persistencia_c,name='Persistencia',marker_color='#087E8B',text=[f'{x:.2f}' for x in met.mae_persistencia_c],textposition='outside'))
-    f.update_layout(barmode='group',yaxis_title='Error absoluto medio (°C) · menor es mejor',xaxis_title='Horizonte (meses)')
-    st.plotly_chart(f,use_container_width=True)
+    st.markdown('<div class="section-number">FIGURA 03 / EVALUACIÓN DEL MODELO</div>',unsafe_allow_html=True)
+    st.subheader("¿Mejora el modelo a una referencia sencilla?")
+    st.caption("Error absoluto medio (MAE) en 21 pruebas históricas por horizonte. Cuanto menor, mejor.")
+    f=fig(410)
+    f.add_trace(go.Bar(x=met.horizonte_meses,y=met.mae_ml_c,name="Ridge · ML",marker_color=COPPER,text=[f"{x:.2f}" for x in met.mae_ml_c],textposition="outside"))
+    f.add_trace(go.Bar(x=met.horizonte_meses,y=met.mae_persistencia_c,name="Persistencia",marker_color=TEAL,text=[f"{x:.2f}" for x in met.mae_persistencia_c],textposition="outside"))
+    f.update_layout(barmode="group",bargap=.24)
+    f.update_xaxes(title="Meses desde el origen",tickmode="linear",dtick=1)
+    f.update_yaxes(title="MAE (°C)",rangemode="tozero")
+    st.plotly_chart(f,use_container_width=True,config={"displaylogo":False})
     better=int((met.mae_ml_c<met.mae_persistencia_c).sum())
-    st.warning(f'**Resultado de la validación:** el ML supera a la persistencia en {better} de 6 horizontes. Por tanto, no está demostrada una ventaja consistente del modelo.',icon='🔎')
-    st.divider()
-    st.subheader('Revisa una prueba histórica concreta')
-    yr=st.select_slider('Año de origen (septiembre)',options=sorted(pd.to_datetime(val.origen).dt.year.unique().tolist()),value=2023)
-    v=val[pd.to_datetime(val.origen).dt.year==yr].sort_values('horizonte_meses')
-    f=basefig(390)
-    for col,name,color in [('observado_c','Lo que ocurrió','#087E8B'),('ml_c','Lo que predijo ML','#E58C36'),('persistencia_c','Persistencia','#8C9BA9')]:
-        f.add_trace(go.Scatter(x=v.fecha_objetivo,y=v[col],mode='lines+markers',name=name,line=dict(color=color,width=3)))
-    f.update_yaxes(title='Anomalía Niño 3.4 (°C)')
-    f.update_xaxes(title='Mes evaluado')
-    st.plotly_chart(f,use_container_width=True)
-    st.caption('Estas pruebas históricas son distintas del pronóstico congelado de octubre de 2026 a marzo de 2027.')
-    st.download_button('Descargar validación histórica',val.to_csv(index=False).encode('utf-8-sig'),'ML3_validacion.csv','text/csv')
+    st.markdown(f'<div class="note"><strong>Lectura de validación.</strong> Ridge obtiene menor MAE que persistencia en {better} de 6 horizontes. Los resultados no acreditan una superioridad consistente del modelo.</div>',unsafe_allow_html=True)
+    st.markdown("#### Una prueba retrospectiva, paso a paso")
+    years=sorted(pd.to_datetime(val.origen).dt.year.unique().tolist())
+    yr=st.select_slider("Septiembre utilizado como origen",options=years,value=2023 if 2023 in years else years[-1])
+    v=val[pd.to_datetime(val.origen).dt.year==yr].sort_values("horizonte_meses")
+    f=fig(370)
+    for col,name,color,dash in [("observado_c","Observado",TEAL,"solid"),("ml_c","Ridge · ML",COPPER,"dash"),("persistencia_c","Persistencia","#82939C","dot")]:
+        f.add_trace(go.Scatter(x=v.fecha_objetivo,y=v[col],mode="lines+markers",name=name,line=dict(color=color,width=3,dash=dash)))
+    f.update_yaxes(title="Anomalía (°C)")
+    st.plotly_chart(f,use_container_width=True,config={"displaylogo":False})
+    st.download_button("Descargar validación (CSV)",val.to_csv(index=False).encode("utf-8-sig"),"ML3_validacion.csv","text/csv")
 with t4:
-    st.subheader('Transparencia metodológica')
-    st.markdown('''**Pregunta:** ¿Cómo podría evolucionar la anomalía mensual de temperatura superficial del mar en la región Niño 3.4 durante los seis meses posteriores a septiembre de 2026?
+    st.markdown('<div class="section-number">ANEXO / TRANSPARENCIA</div>',unsafe_allow_html=True)
+    st.subheader("Datos, método y alcance")
+    st.markdown("""**Pregunta de investigación.** ¿Cómo podría evolucionar la anomalía mensual Niño 3.4 durante los seis meses posteriores a septiembre de 2026?
 
-**Datos:** serie mensual NOAA CPC procesada, enero de 1982 a septiembre de 2026. La variable objetivo es la anomalía mensual Niño 3.4, no el índice ONI oficial de tres meses.
+**Fuente.** NOAA CPC; serie mensual procesada de enero de 1982 a septiembre de 2026. La anomalía Niño 3.4 no debe confundirse con la temperatura absoluta del mar ni con el índice ONI oficial.
 
-**Algoritmo:** regresión Ridge regularizada, seis pronósticos directos (uno por horizonte).
+**Modelo.** Regresión Ridge, seis horizontes directos. Comparación con persistencia y episodios históricos.
 
-**Comparación:** persistencia del último valor observado y búsqueda de episodios históricos similares.
+**Validación.** Orígenes de septiembre de 2005 a 2025 (21 por horizonte), con reentrenamiento retrospectivo; MAE en grados Celsius.
 
-**Evaluación:** orígenes de septiembre de 2005 a 2025, con reentrenamiento retrospectivo; 21 casos por horizonte. MAE en °C.
+**Limitaciones.** Modelo experimental sin superioridad consistente frente a persistencia. No pronostica precipitaciones ni impactos regionales. La banda de error es orientativa, no un intervalo probabilístico calibrado.
 
-**Límites:** el modelo no supera consistentemente la persistencia; la banda de incertidumbre es orientativa y no está calibrada como intervalo probabilístico. No predice lluvia, inundaciones ni impactos por departamento.
-
-**Reproducibilidad:** conservar el CSV de pronóstico congelado y los metadatos antes de actualizar los datos NOAA, para contrastar posteriormente los pronósticos con observaciones.''')
-    st.json({k:v for k,v in info.items() if k!='fuente'},expanded=False)
-    st.download_button('Descargar métricas por horizonte',met.to_csv(index=False).encode('utf-8-sig'),'ML3_metricas.csv','text/csv')
-st.divider()
-st.caption('Investigación académica · ML 3 · NOAA CPC · Fecha de corte: septiembre de 2026 · Resultados experimentales, no oficiales.')
+**Trazabilidad.** Los archivos de resultados y metadatos se conservan congelados para su posterior contraste con observaciones.""")
+    with st.expander("Metadatos técnicos"):
+        st.json(info,expanded=False)
+    st.download_button("Descargar métricas (CSV)",met.to_csv(index=False).encode("utf-8-sig"),"ML3_metricas.csv","text/csv")
+st.markdown('<div class="rule"></div>',unsafe_allow_html=True)
+st.markdown('<div class="small-note">UNAP · Maestría en Ciencia de Datos · Visualización de Datos &nbsp;&nbsp; | &nbsp;&nbsp; NOAA CPC · Corte de observación: septiembre de 2026 &nbsp;&nbsp; | &nbsp;&nbsp; Investigación académica, no oficial.</div>',unsafe_allow_html=True)
