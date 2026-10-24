@@ -102,14 +102,47 @@ with t2:
     st.subheader("Qué ocurrió después en episodios comparables")
     st.caption("Las curvas históricas muestran hechos observados en otros años; no representan escenarios probabilísticos para 2026.")
     years=st.multiselect("Seleccionar episodios",ana.anio_analogo.astype(int).head(10).tolist(),default=ana.anio_analogo.astype(int).head(3).tolist(),max_selections=4)
-    f=fig(450)
+    f=fig(465)
     colors=["#536C83","#7C8D83","#9A8E7B","#9B8190"]
+    endpoints=[]
     for i,year in enumerate(years):
         row=ana[ana.anio_analogo==year].iloc[0]
-        vals=[row[f"mes_futuro_{j}_c"] for j in range(1,horizon+1)]
-        f.add_trace(go.Scatter(x=sel.fecha,y=vals,mode="lines+markers",name=f"Episodio {year}",line=dict(color=colors[i],width=2),marker=dict(size=5)))
-    f.add_trace(go.Scatter(x=sel.fecha,y=sel.pronostico_nino34_c,mode="lines+markers",name="Proyección 2026–27",line=dict(color=COPPER,width=4,dash="dash"),marker=dict(size=7)))
-    f.update_yaxes(title="Anomalía Niño 3.4 (°C)")
+        vals=[float(row[f"mes_futuro_{j}_c"]) for j in range(1,horizon+1)]
+        f.add_trace(go.Scatter(x=sel.fecha,y=vals,mode="lines+markers",name=f"Episodio {year}",showlegend=False,line=dict(color=colors[i],width=2),marker=dict(size=5)))
+        endpoints.append((f"{year}",vals[-1],colors[i]))
+    forecast_vals=sel.pronostico_nino34_c.astype(float).tolist()
+    f.add_trace(go.Scatter(x=sel.fecha,y=forecast_vals,mode="lines+markers",name="Proyección 2026–27",showlegend=False,line=dict(color=COPPER,width=4,dash="dash"),marker=dict(size=7)))
+    endpoints.append(("Pronóstico 2026–27",forecast_vals[-1],COPPER))
+
+    # Etiquetas directas, al final de las líneas y FUERA del área de datos.
+    # Se separan verticalmente para que no se superpongan cuando las curvas convergen.
+    from datetime import timedelta
+    final_date=pd.Timestamp(sel.fecha.iloc[-1])
+    label_date=final_date+timedelta(days=13)
+    max_date=final_date+timedelta(days=73)
+    all_values=[]
+    for trace in f.data:
+        all_values.extend(float(v) for v in trace.y if pd.notna(v))
+    ymin=min(all_values); ymax=max(all_values)
+    yrange=max(ymax-ymin,0.8)
+    padding=yrange*0.13
+    y_low=ymin-padding; y_high=ymax+padding
+    min_gap=(y_high-y_low)*0.077
+    ordered=sorted(enumerate(endpoints),key=lambda pair:pair[1][1])
+    positions={}
+    for rank,(original,(label,value,color)) in enumerate(ordered):
+        positions[original]=max(value, (positions[ordered[rank-1][0]]+min_gap) if rank else value)
+    overflow=max(positions.values())-(y_high-min_gap*0.2) if positions else 0
+    if overflow>0:
+        positions={k:v-overflow for k,v in positions.items()}
+    for i,(label,value,color) in enumerate(endpoints):
+        adjusted=positions[i]
+        # Una guía fina une el valor real con su etiqueta desplazada.
+        f.add_shape(type="line",xref="x",yref="y",x0=final_date,x1=label_date,y0=value,y1=adjusted,line=dict(color=color,width=1))
+        f.add_annotation(x=label_date,y=adjusted,xref="x",yref="y",text=f"<b>{label}</b>",showarrow=False,xanchor="left",yanchor="middle",xshift=5,font=dict(family="Arial",size=11,color=color),bgcolor="rgba(255,255,255,0.93)")
+    f.update_layout(margin=dict(l=10,r=15,t=22,b=15),showlegend=False)
+    f.update_xaxes(range=[pd.Timestamp(sel.fecha.iloc[0])-timedelta(days=12),max_date],title=None)
+    f.update_yaxes(title="Anomalía Niño 3.4 (°C)",range=[y_low,y_high])
     st.plotly_chart(f,use_container_width=True,config={"displaylogo":False})
     st.markdown('<p class="small-note">Una distancia estandarizada menor indica mayor parecido bajo el método de búsqueda empleado. No garantiza que las trayectorias futuras se repitan.</p>',unsafe_allow_html=True)
     with st.expander("Consultar distancias históricas"):
